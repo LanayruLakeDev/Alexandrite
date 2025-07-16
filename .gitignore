@@ -1,0 +1,23 @@
+# Testing folder with API keys - DO NOT COMMIT
+testing/
+
+# Wrangler cache
+.wrangler/
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
