@@ -1,115 +1,97 @@
-# Alexandrite Proxy/Router
+# Alexandrite Router
 
-Proxy that allows any website to connect to NIM APIs using user API keys.
+API proxy implementation for OpenAI-compatible endpoints.
 
 ## Features
 
-- ✅ **Universal Compatibility**: Works with all openai and other websites...
-- ✅ **CORS Support**: Enables browser-based apps to connect to AI APIs
-- ✅ **User API Keys**: Each user uses their own API key
-- ✅ **Streaming Support**: Preserves real-time streaming responses
-- ✅ **Error Handling**: Provides clear error messages
-- ✅ **Secure**: No API keys stored on the server
-- ✅ **Lightweight**: Minimal overhead, no logging
+- CORS header management
+- Request forwarding and response streaming
+- Authentication header processing
+- Error handling and status codes
+- Multi-model support
 
+## Compatibility
 
+- OpenAI API format
+- Streaming response protocols
+- Bearer token authentication
+- JSON payload processing
 
-### 3. Model Name:
+## Configuration
+
+### API Key:
 ```
-meta/llama-3.1-70b-instruct
-```
-or
-```
-qwen/qwq-32b
-```
-
-## Available Models
-
-See [MODELS.md](MODELS.md) for the complete list of 145+ available models.
-
-## 🧪 Testing Scripts
-
-The `testing/` folder contains helpful analysis tools and test scripts:
-
-### **Interactive Chat**
-- `magistral-chat.js` - Interactive terminal chat with Magistral
-- `magistral-chat-clean.js` - Clean version with fixed reasoning_content parsing
-
-### **Analysis Tools**
-- `analyze-magistral-json.js` - Analyze raw JSON structure from models
-- `test-magistral-terminal.js` - Real-time streaming test with progress bars
-
-### **Model Testing**
-- `get-real-models.js` - Get the actual list of available models from API
-- `test-models.js` - Test different model availability
-
-## 🚀 Running Tests
-
-```bash
-# Make sure you're in the testing folder
-cd testing
-
-# Add your API key to any test script first
-# Replace 'api-YOUR_API_KEY_HERE' with your actual key
-
-# Run the interactive chat (most useful)
-node magistral-chat.js
-
-# Run JSON analysis
-node analyze-magistral-json.js
-
-# Run terminal streaming test
-node test-magistral-terminal.js
+api-key-value
 ```
 
-## 🎯 Key Findings
+### Endpoint:
+```
+https://proxy-url.workers.dev/v1/chat/completions
+```
 
-From our testing, we discovered important insights about different AI models:
+### Model:
+```
+model-identifier
+```
 
-1. **Magistral uses `reasoning_content`** field instead of `content`
-2. **Thinking process streams first**, then final answer
-3. **Token limits must be higher** (1500+) for complete responses
-4. **Websites fail because they only look for `content`** field
+## Model Analysis
 
-These insights helped create fixes for the "No response from bot" issue!
+Analysis of response structures across different model implementations:
 
-## ⚠️ Important Notes
+### Standard Response Format
+```json
+{
+  "choices": [{
+    "delta": {
+      "content": "response_text"
+    }
+  }]
+}
+```
 
+### Alternative Response Format
+```json
+{
+  "choices": [{
+    "delta": {
+      "reasoning_content": "reasoning_text"
+    }
+  }]
+}
+```
 
-- **Replace placeholder keys** before running tests
-- 
+### Key Findings
+
+1. **Response Field Variations**: Different models utilize different field names for content delivery
+2. **Token Allocation**: Processing capacity varies significantly between model implementations (500-1500 tokens)
+3. **Stream Structure**: Response chunking behavior differs across model types
+4. **Content Parsing**: Field extraction requirements vary by model architecture
+
+### Implementation Notes
+
+- Field detection logic required for `content` vs `reasoning_content`
+- Buffer management for incomplete JSON chunks
+- Token limit adjustments based on model requirements
+- Stream parsing for multi-part responses
+
+## Testing
+
+Test scripts available in `/testing` directory:
+
+- `analyze-magistral-json.js` - Response structure analysis
+- `magistral-chat-clean.js` - Stream processing implementation
+- `magistral-chat.js` - Interactive testing interface
 
 ## Deployment
 
-1. Install:
 ```bash
 npm install
-```
-
-2. Login:
-```bash
 npx wrangler login
-```
-
-3. Deploy:
-```bash
 npm run deploy
 ```
 
 ## Development
 
-Run:
 ```bash
 npm run dev
 ```
-
-## Security
-
-- API keys are passed through from users, not stored
-- CORS headers properly configured
-- Input validation for API key format
-- Error handling for network issues
-
-## License
-
-Not MIT
