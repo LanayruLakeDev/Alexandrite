@@ -1,124 +1,71 @@
-# Alexandrite Router
+# NVIDIA NIM Proxy for JanitorAI
 
-API proxy implementation for OpenAI-compatible endpoints.
+A Cloudflare Worker proxy that allows users to connect JanitorAI to NVIDIA NIM API using their own API keys.
 
 ## Features
 
-- CORS header management
-- Request forwarding and response streaming
-- Authentication header processing
-- Error handling and status codes
-- Multi-model support
+- ✅ **CORS Support**: Enables browser-based apps to connect to NVIDIA NIM
+- ✅ **User API Keys**: Each user uses their own NVIDIA API key
+- ✅ **Streaming Support**: Preserves real-time streaming responses
+- ✅ **Error Handling**: Provides clear error messages
+- ✅ **Secure**: No API keys stored on the server
 
-## Compatibility
+## How Users Configure JanitorAI
 
-- OpenAI API format
-- Streaming response protocols
-- Bearer token authentication
-- JSON payload processing
-
-## Configuration
+### 1. API Key Field:
+```
+nvapi-your-actual-key-here
 ```
 
-### Model:
+### 2. Completions URL Field:
 ```
-model-identifier
-```
-
-## Model Analysis
-
-Analysis of response structures across different model implementations:
-
-### Standard Response Format
-```json
-{
-  "choices": [{
-    "delta": {
-      "content": "response_text"
-    }
-  }]
-}
+https://nvidia-nim-proxy.your-username.workers.dev/v1/chat/completions
 ```
 
-### Alternative Response Format
-```json
-{
-  "choices": [{
-    "delta": {
-      "reasoning_content": "reasoning_text"
-    }
-  }]
-}
+### 3. Model/AI Name Field:
+```
+meta/llama-3.1-nemotron-70b-instruct
 ```
 
-### Magistral Model Analysis
+## Available Models
 
-**Response Structure**: Uses `reasoning_content` field exclusively for content delivery.
-
-**Thinking Process Tags**:
-- Initial reasoning appears untagged
-- Content flows sequentially through reasoning field
-- No explicit thinking/answer separation markers
-
-**Content Flow Pattern**:
-1. **Reasoning Phase**: Problem analysis and decision-making process
-2. **Solution Phase**: Direct response content (when present)
-3. **Completion**: Stream termination with finish_reason
-
-**Field Behavior**:
-- `reasoning_content`: Contains complete response including reasoning
-- `content`: Rarely populated, when present contains summary/final answer
-- `finish_reason`: Standard termination indicators
-
-**Token Consumption**:
-- Reasoning content: 1000-2500 tokens typical
-- Standard content: 50-300 tokens (when present)
-- Recommended limit: 1500+ tokens for complete responses
-
-**Chunking Characteristics**:
-- Average chunk size: 200-250 bytes
-- Chunks frequently split JSON objects
-- Buffer reconstruction required for complete parsing
-
-**Streaming Behavior**:
-- Immediate reasoning content delivery
-- No explicit thinking/answer phase transitions
-- Content appears as continuous reasoning stream
-
-### Key Findings
-
-1. **Response Field Variations**: Different models utilize different field names for content delivery
-2. **Token Allocation**: Processing capacity varies significantly between model implementations (500-1500 tokens)
-3. **Stream Structure**: Response chunking behavior differs across model types
-4. **Content Parsing**: Field extraction requirements vary by model architecture
-5. **Magistral Specifics**: Requires reasoning_content field monitoring and higher token limits
-
-### Implementation Notes
-
-- Field detection logic required for `content` vs `reasoning_content`
-- Buffer management for incomplete JSON chunks
-- Token limit adjustments based on model requirements
-- Stream parsing for multi-part responses
-- Magistral-specific: reasoning_content should be treated as primary content stream
-
-## Testing
-
-Test scripts available in `/testing` directory:
-
-- `analyze-magistral-json.js` - Response structure analysis
-- `magistral-chat-clean.js` - Stream processing implementation
-- `magistral-chat.js` - Interactive testing interface
+- `meta/llama-3.1-nemotron-70b-instruct`
+- `meta/llama-3.1-8b-instruct`
+- `deepseek-ai/deepseek-r1-distill-llama-70b`
+- `qwen/qwen2.5-72b-instruct`
+- `nvidia/llama-3.1-nemotron-70b-instruct`
 
 ## Deployment
 
+1. Install dependencies:
 ```bash
 npm install
+```
+
+2. Login to Cloudflare:
+```bash
 npx wrangler login
+```
+
+3. Deploy:
+```bash
 npm run deploy
 ```
 
 ## Development
 
+Run locally:
 ```bash
 npm run dev
 ```
+
+## Security
+
+- API keys are passed through from users, not stored
+- CORS headers properly configured
+- Input validation for API key format
+- Error handling for network issues
+
+## License
+
+MIT
