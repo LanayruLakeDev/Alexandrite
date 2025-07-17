@@ -280,23 +280,23 @@ export default {
       let mutableResponse: Response;
       
       if (hideThinking) {
-        // Process response to remove thinking traces from JSON response
+        // Foolproof filter: only look for closing </think> tag, stream everything after
         try {
           const responseText = await response.text();
           const responseData = JSON.parse(responseText);
-          
-          // Filter thinking traces from the response content
           if (responseData.choices && responseData.choices[0] && responseData.choices[0].message && responseData.choices[0].message.content) {
             let content = responseData.choices[0].message.content;
-            
-            // Remove thinking traces
-            content = content.replace(/<think>[\s\S]*?<\/think>\s*/g, ''); // Remove <think> tags and content
-            content = content.trim();
-            
+            // Find closing </think> tag
+            const closeIdx = content.indexOf('</think>');
+            if (closeIdx !== -1) {
+              content = content.slice(closeIdx + 8).trim();
+              console.log('🧠 Filtered everything before </think> (foolproof mode)');
+            } else {
+              // If no closing tag, show everything (for models that don't use thinking)
+              content = content.trim();
+            }
             responseData.choices[0].message.content = content;
-            console.log(`🧠 Filtered thinking traces, final content length: ${content.length}`);
           }
-          
           mutableResponse = new Response(JSON.stringify(responseData), {
             status: response.status,
             statusText: response.statusText,
