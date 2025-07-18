@@ -1,5 +1,5 @@
 /**
- * NIM Proxy with Public API Key Fallback
+ * NVIDIA NIM Proxy with Enhanced Thinking Removal & Performance Optimization
  */
 const MODEL_MAPPING = {
   'gpt-4o': 'deepseek-ai/deepseek-r1',
@@ -10,8 +10,12 @@ const MODEL_MAPPING = {
   'deepseek-reasoner': 'deepseek-ai/deepseek-r1',
 };
 
-// Public API key for shared usage
-const PUBLIC_API_KEY = '';
+// Public API key for passphrase users
+const PUBLIC_API_KEY = 'weird-as-fuck,-but-it-works';
+const SECRET_PASSPHRASE = 'i-goon-on-my-private-server-r3-0528';
+
+// Performance-optimized removal regex
+const THINKING_REGEX = /<think>[\s\S]*?<\/think>|<\/?think>|\[thinking\][\s\S]*?\[\/thinking\]|\[\/?thinking\]/gi;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -41,28 +45,25 @@ export default {
       });
     }
 
-    // 3. API KEY HANDLING WITH PUBLIC FALLBACK
-    let apiKey = PUBLIC_API_KEY; // Default to public key
-    let keySource = "public"; // Track key source for logging
-    
+    // 3. API KEY HANDLING WITH SECRET PASSPHRASE
     const authHeader = request.headers.get('Authorization');
-    if (authHeader) {
-      // Extract from Authorization header if provided
-      if (authHeader.startsWith('Bearer ')) {
-        apiKey = authHeader.substring(7);
-        keySource = "user-header";
-      } else {
-        apiKey = authHeader;
-        keySource = "user-header";
-      }
+    if (!authHeader) return errorResponse('API key is required', 401);
+    
+    let apiKey = authHeader.startsWith('Bearer ') 
+      ? authHeader.substring(7) 
+      : authHeader;
+    
+    // SECRET PASSPHRASE CHECK
+    let keySource = 'User-provided';
+    if (apiKey === SECRET_PASSPHRASE) {
+      apiKey = PUBLIC_API_KEY;
+      keySource = 'Public (via passphrase)';
     }
-
-    // Validate API key format
+    
+    // Validate key format
     if (!apiKey.startsWith('nvapi-')) {
-      return errorResponse('Invalid NVIDIA API key format. Key should start with "nvapi-"', 401);
+      return errorResponse('Invalid NVIDIA API key format', 401);
     }
-
-    console.log(`🔑 Using ${keySource} API key: ${apiKey.substring(0, 10)}...`);
 
     // 4. MODELS ENDPOINT HANDLING
     if (cleanPath === '/v1/models') {
@@ -99,6 +100,7 @@ export default {
     // 5. MAIN REQUEST PROCESSING
     let requestBody = null;
     let modifiedModel = '';
+    let isStreaming = false;
     
     try {
       if (request.body) {
@@ -111,6 +113,9 @@ export default {
           requestBody.model = MODEL_MAPPING[requestBody.model];
         }
         
+        // Check for streaming
+        isStreaming = requestBody.stream === true;
+        
         // Parameter normalization
         if (requestBody.max_completion_tokens) {
           requestBody.max_tokens = requestBody.max_completion_tokens;
@@ -118,12 +123,14 @@ export default {
         }
       }
     } catch (error) {
-      console.error('Request body parse error:', error);
+      return errorResponse('Invalid request body', 400);
     }
 
     // 6. FORWARD REQUEST TO NVIDIA
     try {
       const headers = new Headers(request.headers);
+      // Remove special headers before forwarding
+      headers.delete('X-Hide-Thinking');
       headers.set('Host', new URL(NVIDIA_API_HOST).host);
       headers.set('Authorization', `Bearer ${apiKey}`);
       
@@ -133,33 +140,15 @@ export default {
         body: requestBody ? JSON.stringify(requestBody) : request.body,
       });
       
-      // 7. THINKING TOKEN REMOVAL
+      // 7. ENHANCED THINKING TOKEN REMOVAL
       if (hideThinking && response.status === 200) {
-        try {
-          const responseText = await response.text();
-          let responseData = JSON.parse(responseText);
-          
-          if (responseData.choices?.[0]?.message?.content) {
-            let content = responseData.choices[0].message.content;
-            
-            // ULTIMATE THINKING REMOVAL
-            content = content
-              .replace(/<think>[\s\S]*?<\/think>/gi, '')
-              .replace(/<\/think>/gi, '')
-              .replace(/<think>/gi, '')
-              .replace(/^<\/think>\s*/i, '')
-              .replace(/\[thinking\][\s\S]*?\[\/thinking\]/gi, '')
-              .replace(/\[thinking\]|\[\/thinking\]/gi, '')
-              .trim();
-              
-            responseData.choices[0].message.content = content;
-          }
-          
-          return jsonResponse(responseData);
-          
-        } catch (parseError) {
-          console.error('Thinking removal parse error:', parseError);
-          return new Response(response.body, withCorsHeaders(response));
+        // Handle streaming responses
+        if (isStreaming) {
+          return this.processStreamingResponse(response);
+        } 
+        // Handle non-streaming responses
+        else {
+          return this.processNonStreamResponse(response);
         }
       }
       
@@ -167,13 +156,113 @@ export default {
       return new Response(response.body, withCorsHeaders(response));
       
     } catch (error) {
-      console.error('🚨 Proxy error:', error);
       return errorResponse('Failed to connect to NVIDIA API', 500);
     }
   },
+
+  // Process streaming response with optimized thinking removal
+  async processStreamingResponse(response: Response): Promise<Response> {
+    const { readable, writable } = new TransformStream();
+    const writer = writable.getWriter();
+    const encoder = new TextEncoder();
+    
+    if (!response.body) {
+      return new Response('Empty response body', { status: 500 });
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    
+    const process = async () => {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            // Process any remaining buffer
+            if (buffer) {
+              const cleaned = this.optimizedRemoveThinkingTokens(buffer);
+              await writer.write(encoder.encode(cleaned));
+            }
+            await writer.close();
+            return;
+          }
+          
+          buffer += decoder.decode(value, { stream: true });
+          let position;
+          
+          // Process complete SSE events
+          while ((position = buffer.indexOf('\n\n')) !== -1) {
+            const event = buffer.substring(0, position);
+            buffer = buffer.substring(position + 2);
+            
+            // Process and clean event
+            const cleanedEvent = this.processEvent(event);
+            await writer.write(encoder.encode(cleanedEvent + '\n\n'));
+          }
+        }
+      } catch (e) {
+        console.error('Stream processing error:', e);
+        await writer.abort(e);
+      }
+    };
+    
+    process(); // Start processing without awaiting
+    
+    return new Response(readable, withCorsHeaders(response));
+  },
+
+  // Process individual SSE event
+  processEvent(eventStr: string): string {
+    if (!eventStr.startsWith('data: ')) return eventStr;
+    
+    const dataContent = eventStr.substring(6).trim();
+    if (dataContent === '[DONE]') return eventStr;
+    
+    try {
+      const data = JSON.parse(dataContent);
+      if (data.choices?.[0]?.delta?.content) {
+        data.choices[0].delta.content = this.optimizedRemoveThinkingTokens(
+          data.choices[0].delta.content
+        );
+      }
+      return `data: ${JSON.stringify(data)}`;
+    } catch (e) {
+      return eventStr;
+    }
+  },
+
+  // Process non-streaming response
+  async processNonStreamResponse(response: Response): Promise<Response> {
+    try {
+      const responseText = await response.text();
+      const responseData = JSON.parse(responseText);
+      
+      if (responseData.choices?.[0]?.message?.content) {
+        responseData.choices[0].message.content = this.optimizedRemoveThinkingTokens(
+          responseData.choices[0].message.content
+        );
+      }
+      
+      return jsonResponse(responseData);
+    } catch (error) {
+      return new Response(response.body, withCorsHeaders(response));
+    }
+  },
+
+  // PERFORMANCE-OPTIMIZED THINKING TOKEN REMOVAL
+  optimizedRemoveThinkingTokens(content: string): string {
+    // Fast path for content without thinking tokens
+    if (!content.includes('think') && !content.includes('thinking')) {
+      return content;
+    }
+    
+    // Single-pass removal using pre-compiled regex
+    return content.replace(THINKING_REGEX, '');
+  }
 };
 
-// HELPER FUNCTIONS
+// Helper functions
 function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: { message, type: 'proxy_error' } }, status);
 }
