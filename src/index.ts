@@ -11,7 +11,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for passphrase users
-const PUBLIC_API_KEY = 'F';
+const PUBLIC_API_KEY = 'FILL_THIS_WITH_YOUR_PUBLIC_API_KEY';
 const SECRET_PASSPHRASE = 'i-goon-on-my-private-server-r1-0528';
 
 // Ultra-fast thinking state tracker
