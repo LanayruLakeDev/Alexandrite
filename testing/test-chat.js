@@ -3,7 +3,7 @@ const readline = require('readline');
 // Configuration
 const PROXY_URL = 'https://proxy.alexandrite.workers.dev/v1/chat/completions';
 // Define your NVIDIA API key here (get it from build.nvidia.com)
-const API_KEY = 'nvapi-YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
+const API_KEY = 'YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
 let MODEL = 'nvidia/llama-3.1-nemotron-70b-instruct'; // Correct model name
 
 // Create readline interface

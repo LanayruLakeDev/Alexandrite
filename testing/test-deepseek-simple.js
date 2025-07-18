@@ -11,7 +11,7 @@
     max_tokens: 1000,
     stream: false
   };streaming to see if QwQ shows thinking tokens
-const API_KEY = 'nvapi-YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
+const API_KEY = 'YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
 const MODEL = 'qwen/qwq-32b'; // QwQ thinking model
 
 console.log('🔍 Testing QwQ-32B for thinking tokens...');

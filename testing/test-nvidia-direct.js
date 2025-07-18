@@ -1,5 +1,5 @@
 // Test script to connect directly to NVIDIA NIM API with DeepSeek R1
-const API_KEY = 'nvapi-YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
+const API_KEY = 'YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
 const MODEL = 'deepseek-ai/deepseek-r1-0528'; // DeepSeek R1 model
 
 console.log('🔍 Testing NVIDIA NIM API with DeepSeek R1 for thinking tokens...');

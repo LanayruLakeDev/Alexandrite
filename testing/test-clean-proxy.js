@@ -1,5 +1,5 @@
 // Test the clean proxy with QwQ model
-const API_KEY = 'nvapi-YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
+const API_KEY = 'YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
 const PROXY_URL = 'https://openai-proxy.alexandrite.workers.dev/v1/chat/completions';
 const MODEL = 'qwen/qwq-32b';
 

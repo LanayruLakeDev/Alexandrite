@@ -1,5 +1,5 @@
 // Test script following NVIDIA's OpenAI format with streaming
-const API_KEY = 'nvapi-YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
+const API_KEY = 'YOUR-API-KEY-HERE'; // Replace with your actual NVIDIA API key
 const MODEL = 'deepseek-ai/deepseek-r1-0528'; // Working DeepSeek R1 model
 
 console.log('🔍 Testing NVIDIA NIM API with OpenAI format (streaming)...');
