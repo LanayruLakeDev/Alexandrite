@@ -11,7 +11,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for shared usage
-nst PUBLIC_API_KEY = '';
+const PUBLIC_API_KEY = '';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
