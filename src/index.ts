@@ -1,6 +1,5 @@
 /**
- * NVIDIA NIM Proxy with Public API Key Fallback
- * Uses public key when no API key is provided in request
+ * NIM Proxy with Public API Key Fallback
  */
 const MODEL_MAPPING = {
   'gpt-4o': 'deepseek-ai/deepseek-r1',
@@ -12,7 +11,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for shared usage
-const PUBLIC_API_KEY = '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';
+nst PUBLIC_API_KEY = '';
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
