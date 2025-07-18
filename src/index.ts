@@ -11,7 +11,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for passphrase users
-const PUBLIC_API_KEY = 'FILL_THIS_WITH_YOUR_PUBLIC_API_KEY';
+const PUBLIC_API_KEY = 'F';
 const SECRET_PASSPHRASE = 'i-goon-on-my-private-server-r1-0528';
 
 // Ultra-fast thinking state tracker
@@ -121,6 +121,14 @@ export default {
           requestBody.max_tokens = requestBody.max_completion_tokens;
           delete requestBody.max_completion_tokens;
         }
+        
+        // Set default max_tokens to unlimited if not specified
+        if (!requestBody.max_tokens || requestBody.max_tokens === 0) {
+          requestBody.max_tokens = 4096; // High limit instead of 0
+          console.log('[TokenLimit] Using default high token limit (4096)');
+        } else {
+          console.log(`[TokenLimit] Using client-specified max_tokens: ${requestBody.max_tokens}`);
+        }
       }
     } catch (error) {
       return errorResponse('Invalid request body', 400);
@@ -160,7 +168,7 @@ export default {
     }
   },
 
-  // Process streaming response with ultra-fast thinking removal
+  // Process streaming response with simple thinking removal
   async processStreamingResponse(response: Response): Promise<Response> {
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
@@ -174,35 +182,50 @@ export default {
     const decoder = new TextDecoder();
     let buffer = '';
     let thinkingEnded = false;
+    let sentThinkingMessage = false;
     
     const process = async () => {
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            if (buffer && thinkingEnded) {
-              await writer.write(encoder.encode(buffer));
-            }
             await writer.close();
             return;
           }
           
-          buffer += decoder.decode(value, { stream: true });
-          let position;
+          const chunk = decoder.decode(value, { stream: true });
+          buffer += chunk;
           
           // Process complete SSE events
+          let position;
           while ((position = buffer.indexOf('\n\n')) !== -1) {
             const event = buffer.substring(0, position);
             buffer = buffer.substring(position + 2);
             
-            // Process and clean event
-            const cleanedEvent = this.processEvent(event, thinkingEnded);
-            if (cleanedEvent !== null) {
-              await writer.write(encoder.encode(cleanedEvent + '\n\n'));
-              if (cleanedEvent.includes('</think>')) {
-                thinkingEnded = true;
-              }
+            // Send "*Thinking...*" immediately when we see ANY content (before thinking starts)
+            if (!sentThinkingMessage && event.includes('"content"') && !thinkingEnded) {
+              sentThinkingMessage = true;
+              const thinkingEvent = `data: {"id":"thinking","object":"chat.completion.chunk","created":${Math.floor(Date.now()/1000)},"model":"thinking","choices":[{"index":0,"delta":{"role":"assistant","content":"*Thinking...*"},"logprobs":null,"finish_reason":null}]}\n\n`;
+              await writer.write(encoder.encode(thinkingEvent));
             }
+            
+            // Check if this event contains </think> - if so, thinking has ended
+            if (!thinkingEnded && event.includes('</think>')) {
+              thinkingEnded = true;
+              // Extract content after </think> from this event and hide the </think> tag
+              // Pass false to processEvent so it handles the transition correctly
+              const cleanedEvent = this.processEvent(event, false);
+              if (cleanedEvent !== null) {
+                await writer.write(encoder.encode(cleanedEvent + '\n\n'));
+              }
+              continue;
+            }
+            
+            // If thinking ended, pass through all events
+            if (thinkingEnded) {
+              await writer.write(encoder.encode(event + '\n\n'));
+            }
+            // If still thinking, ignore the event (don't send to user)
           }
         }
       } catch (e) {
@@ -211,59 +234,118 @@ export default {
     };
     
     process();
-    
     return new Response(readable, withCorsHeaders(response));
   },
 
   // Process individual SSE event
   processEvent(eventStr: string, thinkingEnded: boolean): string | null {
-    if (!eventStr.startsWith('data: ')) return eventStr;
+    console.log(`[ThinkingStrip][EVENT] Processing event: "${eventStr}" (thinkingEnded: ${thinkingEnded})`);
+    
+    if (!eventStr.startsWith('data: ')) {
+      console.log('[ThinkingStrip][EVENT] Not a data event, passing through');
+      return eventStr;
+    }
     
     const dataContent = eventStr.substring(6).trim();
-    if (dataContent === '[DONE]') return eventStr;
+    console.log(`[ThinkingStrip][EVENT] Data content: "${dataContent}"`);
+    
+    if (dataContent === '[DONE]') {
+      console.log('[ThinkingStrip][EVENT] DONE event, passing through');
+      return eventStr;
+    }
     
     try {
       const data = JSON.parse(dataContent);
+      console.log('[ThinkingStrip][EVENT] Parsed JSON:', JSON.stringify(data, null, 2));
+      
       if (data.choices?.[0]?.delta?.content) {
         const content = data.choices[0].delta.content;
+        console.log(`[ThinkingStrip][EVENT] Found delta content: "${content}"`);
         
         // If thinking hasn't ended, check if this chunk ends it
         if (!thinkingEnded) {
+          console.log('[ThinkingStrip][EVENT] Thinking not ended, checking for </think>');
           const thinkEnd = content.indexOf('</think>');
+          console.log(`[ThinkingStrip][EVENT] </think> position: ${thinkEnd}`);
+          
           if (thinkEnd !== -1) {
+            console.log(`[ThinkingStrip][EVENT] Found </think> at position ${thinkEnd}`);
             // Show only content after </think>
-            data.choices[0].delta.content = content.substring(thinkEnd + 8);
-            return data.choices[0].delta.content ? `data: ${JSON.stringify(data)}` : null;
+            const stripped = content.substring(thinkEnd + 8);
+            console.log(`[ThinkingStrip][EVENT] Content after </think>: "${stripped}"`);
+            data.choices[0].delta.content = stripped;
+            const result = stripped ? `data: ${JSON.stringify(data)}` : null;
+            console.log(`[ThinkingStrip][EVENT] Returning: ${result}`);
+            return result;
           }
           // Still thinking, don't show anything
+          console.log('[ThinkingStrip][EVENT] Still thinking, filtering out content');
           return null;
         }
         
         // Thinking ended, show all content
+        console.log(`[ThinkingStrip][EVENT] Thinking ended, showing all content: "${content}"`);
         data.choices[0].delta.content = content;
+      } else {
+        console.log('[ThinkingStrip][EVENT] No delta content found');
       }
-      return `data: ${JSON.stringify(data)}`;
+      
+      const result = `data: ${JSON.stringify(data)}`;
+      console.log(`[ThinkingStrip][EVENT] Final result: "${result}"`);
+      return result;
     } catch (e) {
+      console.log('[ThinkingStrip][EVENT] JSON parse error:', e);
       return eventStr;
     }
   },
 
   // Process non-streaming response
   async processNonStreamResponse(response: Response): Promise<Response> {
+    console.log('[ThinkingStrip][NON-STREAM] Processing non-streaming response');
     try {
       const responseText = await response.text();
+      console.log('[ThinkingStrip][NON-STREAM] Raw response text:', responseText);
       const responseData = JSON.parse(responseText);
+      console.log('[ThinkingStrip][NON-STREAM] Parsed response data:', JSON.stringify(responseData, null, 2));
       
       if (responseData.choices?.[0]?.message?.content) {
         const content = responseData.choices[0].message.content;
+        console.log(`[ThinkingStrip][NON-STREAM] Original content: "${content}"`);
+        console.log(`[ThinkingStrip][NON-STREAM] Content length: ${content.length}`);
+        
+        // Check for thinking patterns
+        const hasThinkStart = content.includes('<think>');
         const thinkEnd = content.lastIndexOf('</think>');
-        responseData.choices[0].message.content = thinkEnd !== -1 
-          ? content.substring(thinkEnd + 8)
-          : content;
+        console.log(`[ThinkingStrip][NON-STREAM] Has <think>: ${hasThinkStart}`);
+        console.log(`[ThinkingStrip][NON-STREAM] </think> position: ${thinkEnd}`);
+        
+        let stripped;
+        
+        if (thinkEnd !== -1) {
+          // Normal case: </think> found
+          stripped = content.substring(thinkEnd + 8);
+          console.log(`[ThinkingStrip][NON-STREAM] Normal case - content after </think>: "${stripped}"`);
+        } else if (hasThinkStart) {
+          // Edge case: <think> without </think> (incomplete)
+          console.log('[ThinkingStrip][NON-STREAM] Edge case - incomplete thinking block detected');
+          stripped = '// Thinking ended abruptly before response.';
+        } else {
+          // No thinking tokens at all
+          console.log('[ThinkingStrip][NON-STREAM] No thinking tokens found');
+          stripped = content;
+        }
+        
+        console.log(`[ThinkingStrip][NON-STREAM] Final stripped content: "${stripped}"`);
+        console.log(`[ThinkingStrip][NON-STREAM] Final stripped length: ${stripped.length}`);
+        responseData.choices[0].message.content = stripped.trim();
+      } else {
+        console.log('[ThinkingStrip][NON-STREAM] No message content found in response');
       }
       
+      console.log('[ThinkingStrip][NON-STREAM] Final response data:', JSON.stringify(responseData, null, 2));
       return jsonResponse(responseData);
     } catch (error) {
+      console.log('[ThinkingStrip][NON-STREAM] Processing error:', error);
       return new Response(response.body, withCorsHeaders(response));
     }
   }
