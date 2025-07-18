@@ -1,5 +1,5 @@
 /**
- * NVIDIA NIM Proxy with Enhanced Thinking Removal & Performance Optimization
+ *NIM Proxy with Enhanced Thinking Removal & Performance Optimization
  */
 const MODEL_MAPPING = {
   'gpt-4o': 'deepseek-ai/deepseek-r1',
