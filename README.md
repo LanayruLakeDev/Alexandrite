@@ -1,11 +1,11 @@
-# NVIDIA NIM Proxy for JanitorAI
+# NIM Proxy
 
 Proxy that allows users to connect NIM API endpoints.
 
 ## Features
 
-- ✅ **CORS Support**: Enables browser-based apps to connect to NVIDIA NIM
-- ✅ **User API Keys**: Each user uses their own NVIDIA API key
+- ✅ **CORS Support**: Enables browser-based apps to connect to NIM
+- ✅ **User API Keys**: Each user uses their key
 - ✅ **Streaming Support**: Preserves real-time streaming responses
 - ✅ **Error Handling**: Provides clear error messages
 - ✅ **Secure**: No API keys stored on the server
