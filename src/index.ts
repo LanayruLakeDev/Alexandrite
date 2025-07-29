@@ -1,18 +1,18 @@
 /**
- * NVIDIA NIM Proxy with Enhanced Thinking Removal & Performance Optimization
+ * NIM Proxy with Enhanced Thinking Removal & Performance Optimization
  */
 const MODEL_MAPPING = {
-  'gpt-4o': 'deepseek-ai/deepseek-r1',
+  'gpt-4o': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
   'gpt-4': 'qwen/qwq-32b',
-  'gpt-3.5-turbo': 'meta/llama-3.1-8b-instruct',
-  'claude-3': 'nvidia/llama-3.1-nemotron-70b-instruct',
+  'gpt-3.5-turbo': 'mistralai/mistral-nemotron',
   'deepseek-chat': 'qwen/qwen3-235b-a22b',
   'deepseek-reasoner': 'deepseek-ai/deepseek-r1',
+  'deepseek-prover': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
 };
 
 // Public API key for passphrase users
 const PUBLIC_API_KEY = 'FILL_THIS_WITH_YOUR_PUBLIC_API_KEY';
-const SECRET_PASSPHRASE = 'i-goon-on-my-private-server-r1-0528';
+const SECRET_PASSPHRASE = 'i-goon-on-my-private-server';
 
 // Ultra-fast thinking state tracker
 let globalThinkingEnded = false;
@@ -88,8 +88,6 @@ export default {
         object: "list",
         data: [
           { id: "deepseek-ai/deepseek-r1", object: "model" },
-          { id: "deepseek-ai/deepseek-r1-0528", object: "model" },
-          { id: "qwen/qwen2-7b-instruct", object: "model" },
           { id: "qwen/qwen2.5-7b-instruct", object: "model" },
           { id: "qwen/qwen3-235b-a22b", object: "model" },
           { id: "qwen/qwq-32b", object: "model" }
@@ -122,12 +120,11 @@ export default {
           delete requestBody.max_completion_tokens;
         }
         
-        // Set default max_tokens to unlimited if not specified
-        if (!requestBody.max_tokens || requestBody.max_tokens === 0) {
-          requestBody.max_tokens = 4096; // High limit instead of 0
-          console.log('[TokenLimit] Using default high token limit (4096)');
-        } else {
-          console.log(`[TokenLimit] Using client-specified max_tokens: ${requestBody.max_tokens}`);
+        // Set default max_tokens based on user intent
+        if (!requestBody.max_tokens) {
+          requestBody.max_tokens = 4096;
+        } else if (requestBody.max_tokens === 0) {
+          requestBody.max_tokens = 32768;
         }
       }
     } catch (error) {
