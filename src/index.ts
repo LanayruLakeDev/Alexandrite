@@ -1,6 +1,12 @@
 /**
  * NIM Proxy with Enhanced Thinking Removal & Performance Optimization
  */
+
+// Cloudflare Workers environment interface
+interface Env {
+  // Add any environment variables you need here
+}
+
 const MODEL_MAPPING = {
   'gpt-4o': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
   'gpt-4': 'qwen/qwq-32b',
@@ -11,7 +17,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for passphrase users
-const PUBLIC_API_KEY = 'FILL_THIS_WITH_YOUR_PUBLIC_API_KEY';
+const PUBLIC_API_KEY = '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';
 const SECRET_PASSPHRASE = 'i-goon-on-my-private-server';
 
 // Ultra-fast thinking state tracker
@@ -19,19 +25,32 @@ let globalThinkingEnded = false;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const NVIDIA_API_HOST = 'https://integrate.api.nvidia.com';
-    const url = new URL(request.url);
-    
-    // 1. PATH NORMALIZATION
-    let cleanPath = url.pathname.replace(/\/{2,}/g, '/');
-    if (cleanPath.includes('/chat/completions/chat/completions')) {
-      cleanPath = cleanPath.replace('/chat/completions/chat/completions', '/chat/completions');
-    }
-    cleanPath = cleanPath.endsWith('/models') ? '/v1/models' : '/v1/chat/completions';
+    try {
+      const NVIDIA_API_HOST = 'https://integrate.api.nvidia.com';
+      const url = new URL(request.url);
+      
+      // 1. PATH NORMALIZATION
+      let cleanPath = url.pathname.replace(/\/{2,}/g, '/');
+      
+      // Handle common path variations
+      if (cleanPath.includes('/chat/completions/chat/completions')) {
+        cleanPath = cleanPath.replace('/chat/completions/chat/completions', '/chat/completions');
+      }
+      
+      // Normalize to standard OpenAI paths - FIXED LOGIC
+      if (cleanPath.endsWith('/models') || cleanPath.includes('/models')) {
+        cleanPath = '/v1/models';
+      } else if (cleanPath.includes('/chat/completions') || cleanPath.includes('/completions')) {
+        cleanPath = '/v1/chat/completions';
+      } else if (cleanPath === '/' || cleanPath === '') {
+        cleanPath = '/v1/chat/completions'; // Default to chat completions
+      } else {
+        // Any other path, assume it's a chat completion request
+        cleanPath = '/v1/chat/completions';
+      }
 
-    const nvidiaUrl = new URL(NVIDIA_API_HOST + cleanPath + url.search);
-    const hideThinking = url.searchParams.get('hide_thinking') === 'true' || 
-                        request.headers.get('X-Hide-Thinking') === 'true';
+      const hideThinking = url.searchParams.get('hide_thinking') === 'true' || 
+                          request.headers.get('X-Hide-Thinking') === 'true';
 
     // 2. CORS PREFLIGHT HANDLING
     if (request.method === 'OPTIONS') {
@@ -47,11 +66,13 @@ export default {
 
     // 3. API KEY HANDLING WITH SECRET PASSPHRASE
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader) return errorResponse('API key is required', 401);
     
-    let apiKey = authHeader.startsWith('Bearer ') 
-      ? authHeader.substring(7) 
-      : authHeader;
+    let apiKey = '';
+    if (authHeader) {
+      apiKey = authHeader.startsWith('Bearer ') 
+        ? authHeader.substring(7) 
+        : authHeader;
+    }
     
     // SECRET PASSPHRASE CHECK
     let keySource = 'User-provided';
@@ -60,27 +81,47 @@ export default {
       keySource = 'Public (via passphrase)';
     }
     
-    // Validate key format
-    if (!apiKey.startsWith('nvapi-')) {
-      return errorResponse('Invalid NVIDIA API key format', 401);
+    // VERCEL AI GATEWAY DETECTION & ROUTING
+    const isNvidiaKey = apiKey?.startsWith('nvapi-');
+    const isVercelKey = !isNvidiaKey && apiKey && apiKey.length > 0;  // All non-NVIDIA keys are Vercel
+    let targetEndpoint = NVIDIA_API_HOST;
+    let isVercelRequest = false;
+    
+    if (isVercelKey) {
+      targetEndpoint = 'https://ai-gateway.vercel.sh';
+      isVercelRequest = true;
+      keySource = 'Vercel AI Gateway';
     }
+    
+    // Accept any API key format - no validation restrictions
 
     // 4. MODELS ENDPOINT HANDLING
     if (cleanPath === '/v1/models') {
       try {
-        const modelResponse = await fetch('https://integrate.api.nvidia.com/v1/models', {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        
-        if (modelResponse.ok) {
-          const modelData = await modelResponse.json();
-          const filteredModels = modelData.data.filter((model: any) => 
-            model.id.startsWith('deepseek-ai/') || model.id.startsWith('qwen/')
-          );
-          return jsonResponse({ object: modelData.object, data: filteredModels });
+        if (isVercelRequest) {
+          // Forward to Vercel AI Gateway models endpoint
+          const modelResponse = await fetch('https://ai-gateway.vercel.sh/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          if (modelResponse.ok) {
+            return new Response(modelResponse.body, withCorsHeaders(modelResponse));
+          }
+        } else {
+          // Forward to NVIDIA models endpoint
+          const modelResponse = await fetch('https://integrate.api.nvidia.com/v1/models', {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+          });
+          
+          if (modelResponse.ok) {
+            const modelData = await modelResponse.json();
+            const filteredModels = modelData.data.filter((model: any) => 
+              model.id.startsWith('deepseek-ai/') || model.id.startsWith('qwen/')
+            );
+            return jsonResponse({ object: modelData.object, data: filteredModels });
+          }
         }
       } catch (error) {
-        console.error('Model fetch error:', error);
+        // Silent error handling
       }
       
       // Fallback model list
@@ -96,32 +137,61 @@ export default {
     }
 
     // 5. MAIN REQUEST PROCESSING
-    let requestBody = null;
+    let requestBody: any = null;
     let modifiedModel = '';
     let isStreaming = false;
+    let isVercelModel = false;
     
     try {
       if (request.body) {
         const bodyText = await request.text();
-        requestBody = JSON.parse(bodyText);
+        if (bodyText.trim()) {
+          requestBody = JSON.parse(bodyText);
+        }
         
-        // Apply model mapping
-        if (requestBody.model && MODEL_MAPPING[requestBody.model]) {
-          modifiedModel = requestBody.model;
-          requestBody.model = MODEL_MAPPING[requestBody.model];
+        // Detect Vercel AI Gateway models
+        if (requestBody?.model) {
+          isVercelModel = requestBody.model.includes('/') || // Models with provider prefix like "deepseek/deepseek-v3"
+                          requestBody.model.includes('anthropic') ||
+                          requestBody.model.includes('openai') ||
+                          requestBody.model.includes('vercel');
+          
+          // Force Chutes as ONLY provider for Vercel requests (cheapest!)
+          if (isVercelRequest) {
+            requestBody.providerOptions = {
+              gateway: {
+                only: ['chutes'],  // STRICT: Only use Chutes, fail if not available
+              }
+            };
+          }
+          
+          // Apply NVIDIA model mapping only when using NVIDIA API keys
+          if (!isVercelRequest && requestBody.model && MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING]) {
+            modifiedModel = requestBody.model;
+            requestBody.model = MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING];
+          }
         }
         
         // Check for streaming
-        isStreaming = requestBody.stream === true;
+        isStreaming = requestBody?.stream === true;
         
         // Parameter normalization
-        if (requestBody.max_completion_tokens) {
+        if (requestBody?.max_completion_tokens) {
           requestBody.max_tokens = requestBody.max_completion_tokens;
           delete requestBody.max_completion_tokens;
         }
         
+        // Handle context length parameters (different apps use different names)
+        if (requestBody?.context_length) {
+          // Context length is usually just informational, models handle it automatically
+        }
+        
+        if (requestBody?.max_context_tokens) {
+          // Context length parameter noted but not modified
+        }
+        
         // Set default max_tokens based on user intent
-        if (!requestBody.max_tokens) {
+        if (!requestBody?.max_tokens) {
           requestBody.max_tokens = 4096;
         } else if (requestBody.max_tokens === 0) {
           requestBody.max_tokens = 32768;
@@ -131,18 +201,30 @@ export default {
       return errorResponse('Invalid request body', 400);
     }
 
-    // 6. FORWARD REQUEST TO NVIDIA
+    // 6. FORWARD REQUEST TO TARGET API
     try {
       const headers = new Headers(request.headers);
       // Remove special headers before forwarding
       headers.delete('X-Hide-Thinking');
-      headers.set('Host', new URL(NVIDIA_API_HOST).host);
-      headers.set('Authorization', `Bearer ${apiKey}`);
       
-      const response = await fetch(nvidiaUrl.toString(), {
+      // Set target-specific headers
+      if (isVercelRequest) {
+        headers.set('Host', 'ai-gateway.vercel.sh');
+        headers.set('Authorization', `Bearer ${apiKey}`);
+        // Provider routing is handled via providerOptions in request body
+      } else {
+        headers.set('Host', new URL(NVIDIA_API_HOST).host);
+        headers.set('Authorization', `Bearer ${apiKey}`);
+      }
+      
+      const targetUrl = isVercelRequest 
+        ? `https://ai-gateway.vercel.sh${cleanPath}${url.search}`
+        : `${NVIDIA_API_HOST}${cleanPath}${url.search}`;
+      
+      const response = await fetch(targetUrl, {
         method: request.method,
         headers: headers,
-        body: requestBody ? JSON.stringify(requestBody) : request.body,
+        body: requestBody ? JSON.stringify(requestBody) : null,
       });
       
       // 7. ENHANCED THINKING TOKEN REMOVAL
@@ -161,9 +243,14 @@ export default {
       return new Response(response.body, withCorsHeaders(response));
       
     } catch (error) {
-      return errorResponse('Failed to connect to NVIDIA API', 500);
+      const errorMsg = isVercelRequest ? 'Failed to connect to Vercel AI Gateway' : 'Failed to connect to NVIDIA API';
+      return errorResponse(errorMsg, 500);
     }
-  },
+  } catch (globalError) {
+    // Catch any other errors in the entire request
+    return errorResponse('Internal server error', 500);
+  }
+},
 
   // Process streaming response with simple thinking removal
   async processStreamingResponse(response: Response): Promise<Response> {
@@ -236,113 +323,79 @@ export default {
 
   // Process individual SSE event
   processEvent(eventStr: string, thinkingEnded: boolean): string | null {
-    console.log(`[ThinkingStrip][EVENT] Processing event: "${eventStr}" (thinkingEnded: ${thinkingEnded})`);
-    
     if (!eventStr.startsWith('data: ')) {
-      console.log('[ThinkingStrip][EVENT] Not a data event, passing through');
       return eventStr;
     }
     
     const dataContent = eventStr.substring(6).trim();
-    console.log(`[ThinkingStrip][EVENT] Data content: "${dataContent}"`);
     
     if (dataContent === '[DONE]') {
-      console.log('[ThinkingStrip][EVENT] DONE event, passing through');
       return eventStr;
     }
     
     try {
       const data = JSON.parse(dataContent);
-      console.log('[ThinkingStrip][EVENT] Parsed JSON:', JSON.stringify(data, null, 2));
       
       if (data.choices?.[0]?.delta?.content) {
         const content = data.choices[0].delta.content;
-        console.log(`[ThinkingStrip][EVENT] Found delta content: "${content}"`);
         
         // If thinking hasn't ended, check if this chunk ends it
         if (!thinkingEnded) {
-          console.log('[ThinkingStrip][EVENT] Thinking not ended, checking for </think>');
           const thinkEnd = content.indexOf('</think>');
-          console.log(`[ThinkingStrip][EVENT] </think> position: ${thinkEnd}`);
           
           if (thinkEnd !== -1) {
-            console.log(`[ThinkingStrip][EVENT] Found </think> at position ${thinkEnd}`);
             // Show only content after </think>
             const stripped = content.substring(thinkEnd + 8);
-            console.log(`[ThinkingStrip][EVENT] Content after </think>: "${stripped}"`);
             data.choices[0].delta.content = stripped;
             const result = stripped ? `data: ${JSON.stringify(data)}` : null;
-            console.log(`[ThinkingStrip][EVENT] Returning: ${result}`);
             return result;
           }
           // Still thinking, don't show anything
-          console.log('[ThinkingStrip][EVENT] Still thinking, filtering out content');
           return null;
         }
         
         // Thinking ended, show all content
-        console.log(`[ThinkingStrip][EVENT] Thinking ended, showing all content: "${content}"`);
         data.choices[0].delta.content = content;
-      } else {
-        console.log('[ThinkingStrip][EVENT] No delta content found');
       }
       
       const result = `data: ${JSON.stringify(data)}`;
-      console.log(`[ThinkingStrip][EVENT] Final result: "${result}"`);
       return result;
     } catch (e) {
-      console.log('[ThinkingStrip][EVENT] JSON parse error:', e);
       return eventStr;
     }
   },
 
   // Process non-streaming response
   async processNonStreamResponse(response: Response): Promise<Response> {
-    console.log('[ThinkingStrip][NON-STREAM] Processing non-streaming response');
     try {
       const responseText = await response.text();
-      console.log('[ThinkingStrip][NON-STREAM] Raw response text:', responseText);
       const responseData = JSON.parse(responseText);
-      console.log('[ThinkingStrip][NON-STREAM] Parsed response data:', JSON.stringify(responseData, null, 2));
       
       if (responseData.choices?.[0]?.message?.content) {
         const content = responseData.choices[0].message.content;
-        console.log(`[ThinkingStrip][NON-STREAM] Original content: "${content}"`);
-        console.log(`[ThinkingStrip][NON-STREAM] Content length: ${content.length}`);
         
         // Check for thinking patterns
         const hasThinkStart = content.includes('<think>');
         const thinkEnd = content.lastIndexOf('</think>');
-        console.log(`[ThinkingStrip][NON-STREAM] Has <think>: ${hasThinkStart}`);
-        console.log(`[ThinkingStrip][NON-STREAM] </think> position: ${thinkEnd}`);
         
         let stripped;
         
         if (thinkEnd !== -1) {
           // Normal case: </think> found
           stripped = content.substring(thinkEnd + 8);
-          console.log(`[ThinkingStrip][NON-STREAM] Normal case - content after </think>: "${stripped}"`);
         } else if (hasThinkStart) {
           // Edge case: <think> without </think> (incomplete)
-          console.log('[ThinkingStrip][NON-STREAM] Edge case - incomplete thinking block detected');
           stripped = '// Thinking ended abruptly before response.';
         } else {
           // No thinking tokens at all
-          console.log('[ThinkingStrip][NON-STREAM] No thinking tokens found');
           stripped = content;
         }
         
-        console.log(`[ThinkingStrip][NON-STREAM] Final stripped content: "${stripped}"`);
-        console.log(`[ThinkingStrip][NON-STREAM] Final stripped length: ${stripped.length}`);
         responseData.choices[0].message.content = stripped.trim();
-      } else {
-        console.log('[ThinkingStrip][NON-STREAM] No message content found in response');
       }
       
-      console.log('[ThinkingStrip][NON-STREAM] Final response data:', JSON.stringify(responseData, null, 2));
       return jsonResponse(responseData);
     } catch (error) {
-      console.log('[ThinkingStrip][NON-STREAM] Processing error:', error);
       return new Response(response.body, withCorsHeaders(response));
     }
   }
