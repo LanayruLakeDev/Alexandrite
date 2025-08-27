@@ -50,6 +50,11 @@ testing/
 *proxy*.js
 *deployed-worker*.js
 *thinking-filter*.js
+*cloudflare-worker-simulation*.js
+*magistral*.js
+*fixed-magistral*.js
+*get-real-models*.js
+*magistral-test*.html
 
 # Internal documentation and analysis files
 MODELS.md
