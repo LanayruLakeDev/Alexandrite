@@ -1,7 +1,7 @@
 // DIRECT TEST: Your exact scenario
 // Vercel API key + DeepSeek V3.1 = Should go to Chutes
 
-const YOUR_VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq';
+const YOUR_VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const VERCEL_DIRECT_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 
 console.log('🎯 DIRECT TEST: Your exact scenario');

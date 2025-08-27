@@ -1,7 +1,7 @@
 {
-  "name": "nvidia-nim-proxy",
+  "name": "ai-proxy-worker",
   "version": "1.0.0",
-  "description": "A Cloudflare Worker proxy to connect JanitorAI to NVIDIA NIM API",
+  "description": "A Cloudflare Worker proxy for AI API endpoints",
   "main": "src/index.ts",
   "scripts": {
     "deploy": "wrangler deploy",
@@ -14,7 +14,7 @@
     "@cloudflare/workers-types": "^4.20240821.1",
     "wrangler": "^3.72.0"
   },
-  "keywords": ["nvidia", "nim", "proxy", "janitorai", "cloudflare", "workers"],
+  "keywords": ["ai", "proxy", "cloudflare", "workers", "api"],
   "author": "Your Name",
   "license": "MIT"
 }

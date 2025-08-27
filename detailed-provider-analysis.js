@@ -1,5 +1,5 @@
 // DETAILED test to show EXACTLY how we know it used Chutes
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq';
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const DEPLOYED_WORKER_URL = 'https://openai-proxy.alexandrite.workers.dev/v1/chat/completions';
 
 console.log('🔍 DETAILED ANALYSIS: How do we know it used Chutes?');

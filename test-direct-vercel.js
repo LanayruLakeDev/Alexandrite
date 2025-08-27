@@ -1,5 +1,5 @@
 // Test to see what our proxy is actually sending to Vercel
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq';
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const VERCEL_DIRECT_URL = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 
 console.log('🔍 Testing direct Vercel API with provider options...');

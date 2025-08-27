@@ -19,6 +19,44 @@ npm-debug.log*
 test-personal.js
 secrets.js
 
+# Test files and internal development files
+test-*.js
+testing/
+*test*.js
+*debug*.js
+*detective*.js
+*analyze*.js
+*detailed*.js
+*summary*.js
+*model-summary*.js
+*provider-analysis*.js
+*deployed-logic*.js
+*chutes-test*.js
+*thinking-filter*.js
+*proxy-vercel*.js
+*direct-vercel*.js
+*nvidia-logic*.js
+*nvidia-direct*.js
+*model-mapping*.js
+*model-format*.js
+*models-format*.js
+*vercel-novita*.js
+*vercel-deepseek*.js
+*deepseek-simple*.js
+*deepseek-streaming*.js
+*qwq*.js
+*clean-proxy*.js
+*chat*.js
+*proxy*.js
+*deployed-worker*.js
+*thinking-filter*.js
+
+# Internal documentation and analysis files
+MODELS.md
+DEPLOYMENT-SUMMARY.md
+*summary*.md
+*deployment*.md
+
 # OS generated files
 .DS_Store
 .DS_Store?

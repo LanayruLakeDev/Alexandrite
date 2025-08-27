@@ -1,7 +1,7 @@
 // Analyze all available models from Vercel AI Gateway
 // This script fetches models, providers, and pricing to help you choose the best option
 
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq'; // Your Vercel API key
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const VERCEL_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/models';
 
 async function analyzeVercelModels() {

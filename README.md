@@ -1,10 +1,10 @@
-# NIM Proxy
+# AI Proxy
 
-Proxy that allows users to connect NIM API endpoints.
+A secure proxy service for AI API endpoints.
 
 ## Features
 
-- ✅ **CORS Support**: Enables browser-based apps to connect to NIM
+- ✅ **CORS Support**: Enables browser-based apps to connect to AI APIs
 - ✅ **User API Keys**: Each user uses their key
 - ✅ **Streaming Support**: Preserves real-time streaming responses
 - ✅ **Error Handling**: Provides clear error messages
@@ -19,20 +19,17 @@ your-actual-key-here
 
 ### 2. Completions URL Field:
 ```
-/v1/chat/completions
+your-proxy-endpoint/v1/chat/completions
 ```
 
 ### 3. Model Name:
 ```
-meta/llama-3.1-nemotron-70b-instruct
+your-preferred-model-name
 ```
 
 ## Available Models
 
-- `meta/llama-3.1-8b-instruct`
-- `deepseek-ai/deepseek-r1-distill-llama-70b`
-- `qwen/qwen2.5-72b-instruct`
-- `nvidia/llama-3.1-nemotron-70b-instruct`
+Models are dynamically loaded from the upstream API endpoints.
 
 ## Deployment
 

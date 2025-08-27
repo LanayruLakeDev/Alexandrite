@@ -1,7 +1,7 @@
 // TEST: NVIDIA API Key Logic
 // Test if NVIDIA keys still work and bypass Vercel routing
 
-const NVIDIA_TEST_KEY = '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'; // Public key from worker
+const NVIDIA_TEST_KEY = 'REPLACE_WITH_YOUR_ACTUAL_NVIDIA_KEY'; // ⚠️ REMOVED FOR SECURITY
 const NVIDIA_DIRECT_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 console.log('🔍 TEST: NVIDIA API Key Logic');
@@ -28,16 +28,16 @@ async function testNvidiaKeyLogic() {
   try {
     console.log('🎯 Sending to NVIDIA direct API...');
     console.log('Original model:', payload.model);
-    console.log('Expected mapped model: deepseek-ai/deepseek-r1');
+    console.log('Expected mapped model: [mapped model name]');
     
     // Simulate our worker's model mapping
     const MODEL_MAPPING = {
-      'gpt-4o': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
-      'gpt-4': 'qwen/qwq-32b',
-      'gpt-3.5-turbo': 'mistralai/mistral-nemotron',
-      'deepseek-chat': 'qwen/qwen3-235b-a22b',
-      'deepseek-reasoner': 'deepseek-ai/deepseek-r1',
-      'deepseek-prover': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
+      'gpt-4o': '[provider]/[model-name]',
+      'gpt-4': '[provider]/[model-name]',
+      'gpt-3.5-turbo': '[provider]/[model-name]',
+      'deepseek-chat': '[provider]/[model-name]',
+      'deepseek-reasoner': '[provider]/[model-name]',
+      'deepseek-prover': '[provider]/[model-name]',
     };
     
     // Apply mapping like our worker does
@@ -91,8 +91,8 @@ async function testKeyDetectionLogic() {
   console.log('─'.repeat(40));
   
   const testKeys = [
-    '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',
-    '3j4f01vzabIcPPhYtg7g3lPq',
+    'REPLACE_WITH_YOUR_ACTUAL_NVIDIA_KEY', // ⚠️ REMOVED FOR SECURITY
+    'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY', // ⚠️ REMOVED FOR SECURITY
     'sk-1234567890abcdef',
     'i-goon-on-my-private-server'
   ];
@@ -118,7 +118,7 @@ async function testKeyDetectionLogic() {
       console.log('  → Will NOT use providerOptions');
     } else {
       console.log('  → Will route to Vercel AI Gateway');
-      console.log('  → Will force Chutes provider');
+      console.log('  → Will force optimal provider');
       console.log('  → Will use providerOptions');
     }
   });

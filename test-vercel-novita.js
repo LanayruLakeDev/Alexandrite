@@ -1,6 +1,6 @@
 // Test Vercel AI Gateway with Novita AI provider specifically
 
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq';
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const VERCEL_ENDPOINT = 'https://ai-gateway.vercel.sh/v1/chat/completions';
 
 async function testVercelNovita() {

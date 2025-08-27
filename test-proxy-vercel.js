@@ -1,5 +1,5 @@
 // Test Vercel models through our proxy
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq'; // Your Vercel API key
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const PROXY_URL = 'https://openai-proxy.alexandrite.workers.dev/v1/chat/completions';
 
 console.log('🧪 Testing cheapest models through YOUR proxy...');

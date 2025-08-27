@@ -1,7 +1,7 @@
 // Cloudflare Worker Simulation - Local Testing
 // This simulates our worker logic locally so we can test before deploying
 
-const VERCEL_API_KEY = '3j4f01vzabIcPPhYtg7g3lPq';
+const VERCEL_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_VERCEL_KEY'; // ⚠️ REMOVED FOR SECURITY
 const NVIDIA_API_HOST = 'https://integrate.api.nvidia.com';
 
 // Model mapping (from our worker)
@@ -15,7 +15,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for passphrase users
-const PUBLIC_API_KEY = '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';
+const PUBLIC_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_NVIDIA_KEY'; // ⚠️ REMOVED FOR SECURITY
 const SECRET_PASSPHRASE = 'i-goon-on-my-private-server';
 
 console.log('🔧 CLOUDFLARE WORKER SIMULATION');
