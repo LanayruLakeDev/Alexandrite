@@ -17,7 +17,7 @@ const MODEL_MAPPING = {
 };
 
 // Public API key for passphrase users
-const PUBLIC_API_KEY = 'REPLACE_WITH_YOUR_ACTUAL_NVIDIA_KEY'; // ⚠️ REMOVED FOR SECURITY
+const PUBLIC_API_KEY = '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';
 const SECRET_PASSPHRASE = 'i-goon-on-my-private-server';
 
 // Ultra-fast thinking state tracker
