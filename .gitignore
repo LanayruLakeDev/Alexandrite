@@ -16,8 +16,15 @@ npm-debug.log*
 
 # API Keys - DO NOT COMMIT
 *nvapi-*
+*sk-*
+*api-key*
+*apikey*
 test-personal.js
 secrets.js
+config.local.js
+.env.*
+*.key
+*.secret
 
 # Test files and internal development files
 test-*.js
@@ -55,6 +62,10 @@ testing/
 *fixed-magistral*.js
 *get-real-models*.js
 *magistral-test*.html
+
+# Specific test files with sensitive data
+test-nvidia-reasoning.js
+test-pure-passthrough.js
 
 # Internal documentation and analysis files
 MODELS.md
