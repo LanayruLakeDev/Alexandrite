@@ -1,438 +1,300 @@
-/**
- * NIM Proxy with Enhanced Thinking Removal & Performance Optimization
- */
-
-// Cloudflare Workers environment interface
-interface Env {
-  // Add any environment variables you need here
-}
-
-const MODEL_MAPPING = {
-  'gpt-4o': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
-  'gpt-4': 'qwen/qwq-32b',
-  'gpt-3.5-turbo': 'mistralai/mistral-nemotron',
-  'deepseek-chat': 'qwen/qwen3-235b-a22b',
-  'deepseek-reasoner': 'deepseek-ai/deepseek-r1',
-  'deepseek-prover': 'nvidia/llama-3.3-nemotron-super-49b-v1.5',
-};
-
-// Public API key for passphrase users
-const PUBLIC_API_KEY = 'nvapi-X';
-const SECRET_PASSPHRASE = 'i-goon-on-my-private-server';
-
-// Ultra-fast thinking state tracker
-let globalThinkingEnded = false;
+import { OpenAI } from 'openai';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: any): Promise<Response> {
+    // CORS headers
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
     try {
-      const NVIDIA_API_HOST = 'https://integrate.api.nvidia.com';
       const url = new URL(request.url);
       
-      // 1. PATH NORMALIZATION
-      let cleanPath = url.pathname.replace(/\/{2,}/g, '/');
-      
-      // Handle common path variations
-      if (cleanPath.includes('/chat/completions/chat/completions')) {
-        cleanPath = cleanPath.replace('/chat/completions/chat/completions', '/chat/completions');
-      }
-      
-      // Normalize to standard OpenAI paths - FIXED LOGIC
-      if (cleanPath.endsWith('/models') || cleanPath.includes('/models')) {
-        cleanPath = '/v1/models';
-      } else if (cleanPath.includes('/chat/completions') || cleanPath.includes('/completions')) {
-        cleanPath = '/v1/chat/completions';
-      } else if (cleanPath === '/' || cleanPath === '') {
-        cleanPath = '/v1/chat/completions'; // Default to chat completions
-      } else {
-        // Any other path, assume it's a chat completion request
-        cleanPath = '/v1/chat/completions';
-      }
-
-      const hideThinking = url.searchParams.get('hide_thinking') === 'true' || 
-                          request.headers.get('X-Hide-Thinking') === 'true';
-
-    // 2. CORS PREFLIGHT HANDLING
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-title, x-api-key, Accept, Origin, User-Agent, http-referer, referer',
-          'Access-Control-Max-Age': '86400',
-        },
-      });
-    }
-
-    // 3. API KEY HANDLING WITH SECRET PASSPHRASE
-    const authHeader = request.headers.get('Authorization');
-    
-    let apiKey = '';
-    if (authHeader) {
-      apiKey = authHeader.startsWith('Bearer ') 
-        ? authHeader.substring(7) 
-        : authHeader;
-    }
-    
-    // SECRET PASSPHRASE CHECK
-    let keySource = 'User-provided';
-    if (apiKey === SECRET_PASSPHRASE) {
-      apiKey = PUBLIC_API_KEY;
-      keySource = 'Public (via passphrase)';
-    }
-    
-    // VERCEL AI GATEWAY DETECTION & ROUTING
-    const isNvidiaKey = apiKey?.startsWith('nvapi-');
-    const isVercelKey = !isNvidiaKey && apiKey && apiKey.length > 0;  // All non-NVIDIA keys are Vercel
-    let targetEndpoint = NVIDIA_API_HOST;
-    let isVercelRequest = false;
-    
-    if (isVercelKey) {
-      targetEndpoint = 'https://ai-gateway.vercel.sh';
-      isVercelRequest = true;
-      keySource = 'Vercel AI Gateway';
-    }
-    
-    // Accept any API key format - no validation restrictions
-
-    // 4. MODELS ENDPOINT HANDLING
-    if (cleanPath === '/v1/models') {
-      try {
-        if (isVercelRequest) {
-          // Forward to Vercel AI Gateway models endpoint
-          const modelResponse = await fetch('https://ai-gateway.vercel.sh/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-          });
-          if (modelResponse.ok) {
-            return new Response(modelResponse.body, withCorsHeaders(modelResponse));
-          }
-        } else {
-          // Forward to NVIDIA models endpoint
-          const modelResponse = await fetch('https://integrate.api.nvidia.com/v1/models', {
-            headers: { 'Authorization': `Bearer ${apiKey}` }
-          });
-          
-          if (modelResponse.ok) {
-            const modelData = await modelResponse.json();
-            const filteredModels = modelData.data.filter((model: any) => 
-              model.id.startsWith('deepseek-ai/') || model.id.startsWith('qwen/')
-            );
-            return jsonResponse({ object: modelData.object, data: filteredModels });
-          }
-        }
-      } catch (error) {
-        // Silent error handling
-      }
-      
-      // Fallback model list
-      return jsonResponse({
-        object: "list",
-        data: [
-          { id: "deepseek-ai/deepseek-r1", object: "model" },
-          { id: "qwen/qwen2.5-7b-instruct", object: "model" },
-          { id: "qwen/qwen3-235b-a22b", object: "model" },
-          { id: "qwen/qwq-32b", object: "model" }
-        ]
-      });
-    }
-
-    // 5. MAIN REQUEST PROCESSING
-    let requestBody: any = null;
-    let modifiedModel = '';
-    let isStreaming = false;
-    let isVercelModel = false;
-    
-    try {
-      if (request.body) {
-        const bodyText = await request.text();
-        if (bodyText.trim()) {
-          requestBody = JSON.parse(bodyText);
+      if (url.pathname === '/v1/chat/completions' && request.method === 'POST') {
+        const body = await request.json() as any;
+        const authHeader = request.headers.get('Authorization');
+        
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+          return new Response('Missing or invalid authorization', { status: 401 });
         }
         
-        // Detect Vercel AI Gateway models
-        if (requestBody?.model) {
-          isVercelModel = requestBody.model.includes('/') || // Models with provider prefix like "deepseek/deepseek-v3"
-                          requestBody.model.includes('anthropic') ||
-                          requestBody.model.includes('openai') ||
-                          requestBody.model.includes('vercel');
+        const apiKey = authHeader.substring(7);
+        
+        // Debug API key for reasoning requests
+        if (body.model === 'deepseek-reasoner') {
+          console.log('🧠 REASONING REQUEST - deepseek-reasoner model detected');
+        }
+        
+        // Check if this is a reasoning request
+        if (body.model === 'deepseek-reasoner') {
+          console.log('🧠 REASONING REQUEST - deepseek-reasoner model detected');
           
-          // Force Chutes as ONLY provider for Vercel requests (cheapest!)
-          if (isVercelRequest) {
-            requestBody.providerOptions = {
-              gateway: {
-                only: ['chutes'],  // STRICT: Only use Chutes, fail if not available
+          // Check if the user provided an NVIDIA API key
+          if (!apiKey.startsWith('nvapi-')) {
+            return new Response(JSON.stringify({
+              error: { 
+                message: 'NVIDIA API key required for reasoning. Please use an NVIDIA API key starting with "nvapi-" in your Janitor AI settings.',
+                type: 'authentication_error'
               }
-            };
+            }), { 
+              status: 401, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
           }
           
-          // Apply NVIDIA model mapping only when using NVIDIA API keys
-          if (!isVercelRequest && requestBody.model && MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING]) {
-            modifiedModel = requestBody.model;
-            requestBody.model = MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING];
-          }
+          console.log('✅ Using NVIDIA API key from Janitor AI settings');
+          return handleReasoningPassthrough(body, apiKey, corsHeaders);
         }
         
-        // Check for streaming
-        isStreaming = requestBody?.stream === true;
+        // Handle other models with existing logic
+        console.log('🤖 Regular model request:', body.model);
         
-        // Parameter normalization
-        if (requestBody?.max_completion_tokens) {
-          requestBody.max_tokens = requestBody.max_completion_tokens;
-          delete requestBody.max_completion_tokens;
-        }
-        
-        // Handle context length parameters (different apps use different names)
-        if (requestBody?.context_length) {
-          // Context length is usually just informational, models handle it automatically
-        }
-        
-        if (requestBody?.max_context_tokens) {
-          // Context length parameter noted but not modified
-        }
-        
-        // Set default max_tokens based on user intent
-        if (!requestBody?.max_tokens) {
-          requestBody.max_tokens = 4096;
-        } else if (requestBody.max_tokens === 0) {
-          requestBody.max_tokens = 32768;
-        }
-      }
-    } catch (error) {
-      return errorResponse('Invalid request body', 400);
-    }
-
-    // 6. FORWARD REQUEST TO TARGET API
-    try {
-      const headers = new Headers(request.headers);
-      // Remove special headers before forwarding
-      headers.delete('X-Hide-Thinking');
-      
-      // Set target-specific headers
-      if (isVercelRequest) {
-        headers.set('Host', 'ai-gateway.vercel.sh');
-        headers.set('Authorization', `Bearer ${apiKey}`);
-        // Provider routing is handled via providerOptions in request body
-      } else {
-        headers.set('Host', new URL(NVIDIA_API_HOST).host);
-        headers.set('Authorization', `Bearer ${apiKey}`);
-      }
-      
-      const targetUrl = isVercelRequest 
-        ? `https://ai-gateway.vercel.sh${cleanPath}${url.search}`
-        : `${NVIDIA_API_HOST}${cleanPath}${url.search}`;
-      
-      const response = await fetch(targetUrl, {
-        method: request.method,
-        headers: headers,
-        body: requestBody ? JSON.stringify(requestBody) : null,
-      });
-      
-      // 7. ENHANCED THINKING TOKEN REMOVAL
-      if (hideThinking && response.status === 200) {
-        // Handle streaming responses
-        if (isStreaming) {
-          return this.processStreamingResponse(response);
-        } 
-        // Handle non-streaming responses
-        else {
-          return this.processNonStreamResponse(response);
-        }
-      }
-      
-      // Return unmodified response
-      return new Response(response.body, withCorsHeaders(response));
-      
-    } catch (error) {
-      const errorMsg = isVercelRequest ? 'Failed to connect to Vercel AI Gateway' : 'Failed to connect to NVIDIA API';
-      return errorResponse(errorMsg, 500);
-    }
-  } catch (globalError) {
-    // Catch any other errors in the entire request
-    return errorResponse('Internal server error', 500);
-  }
-},
-
-  // Process streaming response with simple thinking removal
-  async processStreamingResponse(response: Response): Promise<Response> {
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-    
-    if (!response.body) {
-      return new Response('Empty response body', { status: 500 });
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let thinkingEnded = false;
-    let sentThinkingMessage = false;
-    
-    const process = async () => {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            await writer.close();
-            return;
-          }
-          
-          const chunk = decoder.decode(value, { stream: true });
-          buffer += chunk;
-          
-          // Process complete SSE events
-          let position;
-          while ((position = buffer.indexOf('\n\n')) !== -1) {
-            const event = buffer.substring(0, position);
-            buffer = buffer.substring(position + 2);
-            
-            // Send "*Thinking...*" immediately when we see ANY content (before thinking starts)
-            if (!sentThinkingMessage && event.includes('"content"') && !thinkingEnded) {
-              sentThinkingMessage = true;
-              const thinkingEvent = `data: {"id":"thinking","object":"chat.completion.chunk","created":${Math.floor(Date.now()/1000)},"model":"thinking","choices":[{"index":0,"delta":{"role":"assistant","content":"*Thinking...*"},"logprobs":null,"finish_reason":null}]}\n\n`;
-              await writer.write(encoder.encode(thinkingEvent));
-            }
-            
-            // Check if this event contains </think> - if so, thinking has ended
-            if (!thinkingEnded && event.includes('</think>')) {
-              thinkingEnded = true;
-              // Extract content after </think> from this event and hide the </think> tag
-              // Pass false to processEvent so it handles the transition correctly
-              const cleanedEvent = this.processEvent(event, false);
-              if (cleanedEvent !== null) {
-                await writer.write(encoder.encode(cleanedEvent + '\n\n'));
-              }
-              continue;
-            }
-            
-            // If thinking ended, pass through all events
-            if (thinkingEnded) {
-              await writer.write(encoder.encode(event + '\n\n'));
-            }
-            // If still thinking, ignore the event (don't send to user)
-          }
-        }
-      } catch (e) {
-        await writer.abort(e);
-      }
-    };
-    
-    process();
-    return new Response(readable, withCorsHeaders(response));
-  },
-
-  // Process individual SSE event
-  processEvent(eventStr: string, thinkingEnded: boolean): string | null {
-    if (!eventStr.startsWith('data: ')) {
-      return eventStr;
-    }
-    
-    const dataContent = eventStr.substring(6).trim();
-    
-    if (dataContent === '[DONE]') {
-      return eventStr;
-    }
-    
-    try {
-      const data = JSON.parse(dataContent);
-      
-      if (data.choices?.[0]?.delta?.content) {
-        const content = data.choices[0].delta.content;
-        
-        // If thinking hasn't ended, check if this chunk ends it
-        if (!thinkingEnded) {
-          const thinkEnd = content.indexOf('</think>');
-          
-          if (thinkEnd !== -1) {
-            // Show only content after </think>
-            const stripped = content.substring(thinkEnd + 8);
-            data.choices[0].delta.content = stripped;
-            const result = stripped ? `data: ${JSON.stringify(data)}` : null;
-            return result;
-          }
-          // Still thinking, don't show anything
-          return null;
-        }
-        
-        // Thinking ended, show all content
-        data.choices[0].delta.content = content;
-      }
-      
-      const result = `data: ${JSON.stringify(data)}`;
-      return result;
-    } catch (e) {
-      return eventStr;
-    }
-  },
-
-  // Process non-streaming response
-  async processNonStreamResponse(response: Response): Promise<Response> {
-    try {
-      const responseText = await response.text();
-      const responseData = JSON.parse(responseText);
-      
-      if (responseData.choices?.[0]?.message?.content) {
-        const content = responseData.choices[0].message.content;
-        
-        // Check for thinking patterns
-        const hasThinkStart = content.includes('<think>');
-        const thinkEnd = content.lastIndexOf('</think>');
-        
-        let stripped;
-        
-        if (thinkEnd !== -1) {
-          // Normal case: </think> found
-          stripped = content.substring(thinkEnd + 8);
-        } else if (hasThinkStart) {
-          // Edge case: <think> without </think> (incomplete)
-          stripped = '// Thinking ended abruptly before response.';
+        // Determine provider based on model
+        if (body.model.includes('qwen') || body.model.includes('deepseek') || body.model.includes('llama') || body.model.includes('nvidia/')) {
+          console.log('📡 Routing to NVIDIA for model:', body.model);
+          return await handleNVIDIARequest(body, apiKey, corsHeaders);
         } else {
-          // No thinking tokens at all
-          stripped = content;
+          console.log('📡 Routing to OpenAI for model:', body.model);
+          return await handleOpenAIRequest(body, apiKey, corsHeaders);
         }
-        
-        responseData.choices[0].message.content = stripped.trim();
       }
       
-      return jsonResponse(responseData);
+      return new Response('Not found', { status: 404 });
+      
     } catch (error) {
-      return new Response(response.body, withCorsHeaders(response));
+      console.error('Error:', error);
+      return new Response('Internal server error', { 
+        status: 500, 
+        headers: corsHeaders 
+      });
     }
   }
 };
 
-// Helper functions
-function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: { message, type: 'proxy_error' } }, status);
-}
+// Handle NVIDIA requests (existing models)
+async function handleNVIDIARequest(body: any, apiKey: string, corsHeaders: any): Promise<Response> {
+  try {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': body.stream ? 'text/event-stream' : 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
 
-function jsonResponse(data: any, status: number = 200): Response {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      ...corsHeaders()
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`NVIDIA API error: ${response.status} ${errorText}`);
     }
-  });
-}
-
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-title, x-api-key, Accept, Origin, User-Agent, http-referer, referer',
-  };
-}
-
-function withCorsHeaders(response: Response): ResponseInit {
-  const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(corsHeaders())) {
-    headers.set(key, value);
+    
+    if (body.stream) {
+      return new Response(response.body, {
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        }
+      });
+    } else {
+      const responseData = await response.json();
+      return new Response(JSON.stringify(responseData), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  } catch (error) {
+    console.error('NVIDIA API error:', error);
+    return new Response(JSON.stringify({ 
+      error: { message: 'NVIDIA API error: ' + error.message } 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
-  return {
-    status: response.status,
-    headers: headers,
-  };
 }
 
-interface Env {}
+// Handle OpenAI requests
+async function handleOpenAIRequest(body: any, apiKey: string, corsHeaders: any): Promise<Response> {
+  try {
+    const openai = new OpenAI({ apiKey: apiKey });
+    const response = await openai.chat.completions.create(body);
+    
+    if (body.stream) {
+      // For streaming, we need to handle differently
+      return new Response(JSON.stringify({ error: { message: 'OpenAI streaming not implemented in this version' } }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    } else {
+      return new Response(JSON.stringify(response), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+  } catch (error) {
+    console.error('OpenAI API error:', error);
+    return new Response(JSON.stringify({ 
+      error: { message: 'OpenAI API error: ' + error.message } 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleReasoningPassthrough(requestBody: any, apiKey: string, corsHeaders: any): Promise<Response> {
+  const startTime = Date.now();
+  const sessionId = 'session-' + Math.random().toString(36).substr(2, 9);
+  
+  console.log('🚀 [' + sessionId + '] REASONING SESSION STARTED');
+  
+  try {
+    // Prepare NVIDIA request
+    const nvidiaRequest = {
+      ...requestBody,
+      model: 'deepseek-ai/deepseek-v3.1',
+      chat_template_kwargs: { "thinking": true },
+      stream: true
+    };
+
+    // Make request to NVIDIA
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+        'User-Agent': 'Mozilla/5.0 (compatible; OpenAI-JavaScript/4.0.0)'
+      },
+      body: JSON.stringify(nvidiaRequest)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`NVIDIA API error: ${response.status}`);
+    }
+
+    console.log('✅ [' + sessionId + '] NVIDIA responded, starting passthrough...');
+
+    // Create passthrough stream
+    const readable = new ReadableStream({
+      start(controller) {
+        (async () => {
+          try {
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error('No reader');
+
+            const decoder = new TextDecoder();
+            let reasoningCount = 0;
+            let contentCount = 0;
+            let totalChunks = 0;
+            let fullReasoning = '';
+            let fullContent = '';
+            let buffer = ''; // Accumulate partial chunks
+
+            while (true) {
+              const { done, value } = await reader.read();
+              
+              if (done) {
+                console.log('📊 [' + sessionId + '] FINAL RESULTS:');
+                console.log('🧠 FULL REASONING:', fullReasoning || '(none)');
+                console.log('💬 FULL ANSWER:', fullContent || '(none)');
+                console.log('🔢 Total chunks processed:', totalChunks);
+                break;
+              }
+
+              totalChunks++;
+              
+              // Forward NVIDIA data exactly as received
+              controller.enqueue(value);
+
+              // Accumulate text in buffer for proper parsing
+              try {
+                const text = decoder.decode(value, { stream: true });
+                buffer += text;
+                
+                // Split by double newlines to get complete SSE events
+                const events = buffer.split('\n\n');
+                // Keep the last incomplete event in buffer
+                buffer = events.pop() || '';
+                
+                for (const event of events) {
+                  if (!event.trim()) continue;
+                  
+                  const lines = event.split('\n');
+                  for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    
+                    const dataContent = line.substring(6).trim();
+                    if (dataContent === '[DONE]') continue;
+
+                    try {
+                      const chunk = JSON.parse(dataContent);
+                      
+                      if (chunk.choices?.[0]?.delta) {
+                        const delta = chunk.choices[0].delta;
+                        
+                        if (delta.reasoning_content) {
+                          reasoningCount++;
+                          fullReasoning += delta.reasoning_content;
+                          console.log('🧠 [' + sessionId + '] +REASONING #' + reasoningCount + ': "' + delta.reasoning_content + '"');
+                        }
+                        
+                        if (delta.content) {
+                          contentCount++;
+                          fullContent += delta.content;
+                          console.log('💬 [' + sessionId + '] +CONTENT #' + contentCount + ': "' + delta.content + '"');
+                        }
+                      }
+                      
+                    } catch (parseError) {
+                      console.log('⚠️ [' + sessionId + '] Parse error: ' + parseError.message);
+                    }
+                  }
+                }
+              } catch (decodeError) {
+                console.log('⚠️ [' + sessionId + '] Decode error: ' + decodeError.message);
+              }
+            }
+
+          } catch (error) {
+            console.error('❌ [' + sessionId + '] Stream error:', error.message);
+            controller.error(error);
+          } finally {
+            controller.close();
+          }
+        })();
+      }
+    });
+
+    return new Response(readable, {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ [' + sessionId + '] Passthrough failed:', error.message);
+    
+    return new Response(JSON.stringify({ 
+      error: { 
+        message: 'Passthrough failed: ' + error.message,
+        type: 'passthrough_error',
+        session_id: sessionId
+      } 
+    }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}

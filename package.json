@@ -14,7 +14,16 @@
     "@cloudflare/workers-types": "^4.20240821.1",
     "wrangler": "^3.72.0"
   },
-  "keywords": ["ai", "proxy", "cloudflare", "workers", "api"],
+  "keywords": [
+    "ai",
+    "proxy",
+    "cloudflare",
+    "workers",
+    "api"
+  ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^5.19.1"
+  }
 }
