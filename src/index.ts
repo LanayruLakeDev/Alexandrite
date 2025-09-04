@@ -139,6 +139,7 @@ export default {
     // 5. MAIN REQUEST PROCESSING
     let requestBody: any = null;
     let modifiedModel = '';
+    let originalModel = '';
     let isStreaming = false;
     let isVercelModel = false;
     
@@ -151,6 +152,7 @@ export default {
         
         // Detect Vercel AI Gateway models
         if (requestBody?.model) {
+          originalModel = requestBody.model;
           isVercelModel = requestBody.model.includes('/') || // Models with provider prefix like "deepseek/deepseek-v3"
                           requestBody.model.includes('anthropic') ||
                           requestBody.model.includes('openai') ||
@@ -169,6 +171,11 @@ export default {
           if (!isVercelRequest && requestBody.model && MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING]) {
             modifiedModel = requestBody.model;
             requestBody.model = MODEL_MAPPING[requestBody.model as keyof typeof MODEL_MAPPING];
+          }
+          
+          // Add chat_template_kwargs for deepseek-reasoner to enable reasoning tokens
+          if (originalModel === 'deepseek-reasoner') {
+            requestBody.chat_template_kwargs = { thinking: true };
           }
         }
         
@@ -231,11 +238,11 @@ export default {
       if (hideThinking && response.status === 200) {
         // Handle streaming responses
         if (isStreaming) {
-          return this.processStreamingResponse(response);
+          return this.processStreamingResponse(response, originalModel);
         } 
         // Handle non-streaming responses
         else {
-          return this.processNonStreamResponse(response);
+          return this.processNonStreamResponse(response, originalModel);
         }
       }
       
@@ -253,7 +260,7 @@ export default {
 },
 
   // Process streaming response with simple thinking removal
-  async processStreamingResponse(response: Response): Promise<Response> {
+  async processStreamingResponse(response: Response, originalModel: string = ''): Promise<Response> {
     const { readable, writable } = new TransformStream();
     const writer = writable.getWriter();
     const encoder = new TextEncoder();
@@ -267,6 +274,7 @@ export default {
     let buffer = '';
     let thinkingEnded = false;
     let sentThinkingMessage = false;
+    const isDeepSeekReasoner = originalModel === 'deepseek-reasoner';
     
     const process = async () => {
       try {
@@ -286,6 +294,16 @@ export default {
             const event = buffer.substring(0, position);
             buffer = buffer.substring(position + 2);
             
+            // For deepseek-reasoner, handle reasoning_content field differently
+            if (isDeepSeekReasoner) {
+              const processedEvent = this.processDeepSeekReasoningEvent(event);
+              if (processedEvent !== null) {
+                await writer.write(encoder.encode(processedEvent + '\n\n'));
+              }
+              continue;
+            }
+            
+            // Original thinking token handling for other models
             // Send "*Thinking...*" immediately when we see ANY content (before thinking starts)
             if (!sentThinkingMessage && event.includes('"content"') && !thinkingEnded) {
               sentThinkingMessage = true;
@@ -319,6 +337,51 @@ export default {
     
     process();
     return new Response(readable, withCorsHeaders(response));
+  },
+
+  // Process DeepSeek reasoning events - handle reasoning_content field
+  processDeepSeekReasoningEvent(eventStr: string): string | null {
+    if (!eventStr.startsWith('data: ')) {
+      return eventStr;
+    }
+    
+    const dataContent = eventStr.substring(6).trim();
+    
+    if (dataContent === '[DONE]') {
+      return eventStr;
+    }
+    
+    try {
+      const data = JSON.parse(dataContent);
+      
+      // Handle reasoning content - show with [REASONING] prefix
+      if (data.choices?.[0]?.delta?.reasoning_content) {
+        const reasoningContent = data.choices[0].delta.reasoning_content;
+        // Create a new event for reasoning content with visual indicator
+        const reasoningData = {
+          ...data,
+          choices: [{
+            ...data.choices[0],
+            delta: {
+              ...data.choices[0].delta,
+              content: `[REASONING] ${reasoningContent}`,
+              reasoning_content: undefined // Remove the original field
+            }
+          }]
+        };
+        return `data: ${JSON.stringify(reasoningData)}`;
+      }
+      
+      // Handle regular content - pass through as is
+      if (data.choices?.[0]?.delta?.content) {
+        return eventStr;
+      }
+      
+      // For other types of events (metadata, etc.), pass through
+      return eventStr;
+    } catch (e) {
+      return eventStr;
+    }
   },
 
   // Process individual SSE event
@@ -366,32 +429,50 @@ export default {
   },
 
   // Process non-streaming response
-  async processNonStreamResponse(response: Response): Promise<Response> {
+  async processNonStreamResponse(response: Response, originalModel: string = ''): Promise<Response> {
     try {
       const responseText = await response.text();
       const responseData = JSON.parse(responseText);
+      const isDeepSeekReasoner = originalModel === 'deepseek-reasoner';
       
-      if (responseData.choices?.[0]?.message?.content) {
-        const content = responseData.choices[0].message.content;
+      if (responseData.choices?.[0]?.message) {
+        const message = responseData.choices[0].message;
         
-        // Check for thinking patterns
-        const hasThinkStart = content.includes('<think>');
-        const thinkEnd = content.lastIndexOf('</think>');
-        
-        let stripped;
-        
-        if (thinkEnd !== -1) {
-          // Normal case: </think> found
-          stripped = content.substring(thinkEnd + 8);
-        } else if (hasThinkStart) {
-          // Edge case: <think> without </think> (incomplete)
-          stripped = '// Thinking ended abruptly before response.';
-        } else {
-          // No thinking tokens at all
-          stripped = content;
+        // Handle DeepSeek reasoning content in non-streaming mode
+        if (isDeepSeekReasoner && message.reasoning_content) {
+          const reasoningContent = message.reasoning_content;
+          const finalContent = message.content || '';
+          
+          // Combine reasoning and final content with visual separation
+          const combinedContent = `[REASONING] ${reasoningContent}\n\n[FINAL ANSWER] ${finalContent}`;
+          responseData.choices[0].message.content = combinedContent;
+          
+          // Remove the reasoning_content field from response
+          delete responseData.choices[0].message.reasoning_content;
         }
-        
-        responseData.choices[0].message.content = stripped.trim();
+        // Handle traditional thinking patterns for other models
+        else if (message.content) {
+          const content = message.content;
+          
+          // Check for thinking patterns
+          const hasThinkStart = content.includes('<think>');
+          const thinkEnd = content.lastIndexOf('</think>');
+          
+          let stripped;
+          
+          if (thinkEnd !== -1) {
+            // Normal case: </think> found
+            stripped = content.substring(thinkEnd + 8);
+          } else if (hasThinkStart) {
+            // Edge case: <think> without </think> (incomplete)
+            stripped = '// Thinking ended abruptly before response.';
+          } else {
+            // No thinking tokens at all
+            stripped = content;
+          }
+          
+          responseData.choices[0].message.content = stripped.trim();
+        }
       }
       
       return jsonResponse(responseData);
